@@ -4,7 +4,7 @@ raise "need two arguments, word list and word length" unless ARGV.length == 2
 
 word_len = ARGV[1].to_i
 raise "word length must be a number greater than zero" if word_len <= 0
-words = File.read(ARGV[0]).split("\n").find_all{|w| w.length == word_len && w.chars.all?{|c| c.ord < 127}}
+words = File.read(ARGV[0]).scrub.split("\n").map(&:downcase).find_all{|w| w.length == word_len && w.chars.all?{|c| ('a'..'z').include?(c)}}
 
 DB = Sequel.sqlite("main.db")
 
