@@ -4,4 +4,5 @@
 /build/
 !/build/.keep
 wordsquare-wordlist-tmpfile-*.txt
+word-square-result-*.txt
 *.log

@@ -1,11 +1,12 @@
 require 'open3'
+require 'shell'
 require 'socket'
 require 'json'
 
 Thread.abort_on_exception = true
 
 raise "Need server name/ip, path to compute executable, and number of threads" unless ARGV.size == 3
-$compute_exec = ARGV[1]
+$compute_exec = File.absolute_path ARGV[1]
 $num_threads = ARGV[2].to_i
 puts "Will connect to server #{ARGV[0]}, and use the executable located at the path #{$compute_exec} for computation. Thread pool size is #{$num_threads}"
 
@@ -27,13 +28,17 @@ class WorkUnit
       "-s", @word
     ]
     p args
-    stdout, stderr, status = Open3.capture3(*args)
-    STDERR.print stderr
-    if status.success?
-      $conn.puts({type: 'work_finish', word: @word, results: stdout.split("\n")}.to_json)
-    else
-      STDERR.puts "compute failed for word #{@word} :("
-    end
+    result_fn = `mktemp word-square-result-XXXXXXX.txt`.chomp
+    sh = Shell.new
+    sh.system(*args) > result_fn
+    $conn.puts({type: 'work_finish', word: @word, results: File.read(result_fn).split("\n")}.to_json)
+    #stdout, stderr, status = Open3.capture3(*args)
+    #STDERR.print stderr
+    #if status.success?
+    #  $conn.puts({type: 'work_finish', word: @word, results: stdout.split("\n")}.to_json)
+    #else
+    #  STDERR.puts "compute failed for word #{@word} :("
+    #end
   end
 end
 
