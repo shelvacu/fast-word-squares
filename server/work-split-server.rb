@@ -22,7 +22,11 @@ while cli = serv.accept
   Thread.new(cli) do |cli|
     ip = cli.remote_address.ip_address
     $logger.info("New connection from #{ip}")
-    cli.puts({type: 'wordlist', words: DB[:words].map(:word)}.to_json)
+    cli.puts({
+               type: 'wordlist',
+               words: DB[:words].map(:word),
+               server_source_location: "https://github.com/shelvacu/fast-word-squares"
+             }.to_json)
     
     while true
       begin
