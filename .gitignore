@@ -1,0 +1,6 @@
+/old/
+*.db
+*.sql
+/build/
+!/build/.keep
+wordsquare-wordlist-tmpfile-*.txt
