@@ -11,7 +11,7 @@ $num_threads = ARGV[2].to_i
 puts "Will connect to server #{ARGV[0]}, and use the executable located at the path #{$compute_exec} for computation. Thread pool size is #{$num_threads}"
 
 $threads_to_make = $num_threads
-$wordlist_fn = `mktemp wordsquare-wordlist-tmpfile-XXXXXXX.txt`.chomp
+$wordlist_fn = `mktemp wordsquare-wordlist-tmpfile-tmp.XXXXXXX`.chomp
 
 class WorkUnit
   def initialize(word)
@@ -28,7 +28,7 @@ class WorkUnit
       "-s", @word
     ]
     p args
-    result_fn = `mktemp word-square-result-XXXXXXX.txt`.chomp
+    result_fn = `mktemp word-square-result-tmp.XXXXXXX`.chomp
     sh = Shell.new
     sh.system(*args) > result_fn
     $conn.puts({type: 'work_finish', word: @word, results: File.read(result_fn).split("\n")}.to_json)

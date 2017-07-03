@@ -8,6 +8,8 @@ Thread.abort_on_exception = true
 
 $logger = Logger.new("work-split-server.log")
 
+$logger.info("Starting work split server")
+
 DB = Sequel.sqlite("main.db")
 #create tables and stuff
 
@@ -41,7 +43,12 @@ while cli = serv.accept
       end
         
       stuff = JSON.parse line
-      $logger.debug "Received from #{ip}: #{line.dump}"
+      debug_line = line.dup
+      #would make the log *very* big if this wasn't done.
+      if debug_line.has_key? 'results'
+        debug_line['results'] = '...omitted...'
+      end
+      $logger.debug "Received from #{ip}: #{debug_line.dump}"
       case stuff['type']
       when 'work_request'
         pieces = (stuff['pieces'] || 1).to_i
@@ -54,8 +61,18 @@ while cli = serv.accept
         pieces.times do
           update_id = SecureRandom.uuid
           now = Time.now.utc
+          to_update = DB[
+            "SELECT rowid "+
+            "FROM words "+
+            "WHERE finished = 0 "+
+            #"AND ("+
+            #" assigned_to IS NULL "+
+            #" OR last_progress <= ? "+
+            #" OR work_start <= ?) "+
+            "ORDER BY (assigned_to IS NULL) DESC, work_start ASC"+ 
+            "LIMIT 1"]
           num_updated = DB[:words]
-            .where(rowid: DB["SELECT rowid FROM words WHERE finished = 0 AND (assigned_to IS NULL OR last_progress <= ? OR work_start <= ?) LIMIT 1", now - 60*2, now - 60*2])
+            .where(rowid: to_update)
             .update(assigned_to: ip, last_progress: now, work_start: now, finder_uuid: update_id)
           break if num_updated == 0
           new_word = DB[:words].where(finder_uuid: update_id).get(:word)
@@ -78,7 +95,7 @@ while cli = serv.accept
         DB[:words].where(word: word, assigned_to: ip).update(last_progress: Time.now.utc)
       when 'work_finish'
         DB.transaction do
-          num_upd = DB[:words].where(assigned_to: ip, word: stuff['word']).update(finished: true)
+          num_upd = DB[:words].where(word: stuff['word']).update(finished: true)
           if num_upd == 0
             $logger.warn("work_finish was sent, but work does not correspond to entry in DB, ignoring...")
             raise Sequel::Rollback
