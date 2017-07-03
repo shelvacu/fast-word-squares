@@ -49,7 +49,11 @@ puts "Connected"
 line = JSON.parse($conn.gets)
 raise unless line['type'] == 'wordlist'
 puts "Got wordlist, first word is #{line['words'].first}"
-$word_len = line['words'].first.size
+if line.has_key? 'options'
+  $word_len = line['options']['square_size']
+else
+  $word_len = line['words'].first.size
+end
 File.open($wordlist_fn, 'wt') do |fn|
   line['words'].each do |word|
     fn.puts word

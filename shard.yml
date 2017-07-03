@@ -1,0 +1,13 @@
+name: word-square
+version: 0.1.0
+
+authors:
+  - Shelvacu <shelvacu@gmail.com>
+
+targets:
+  word-square:
+    main: src/word-square.cr
+
+crystal: 0.22.0
+
+license: MIT

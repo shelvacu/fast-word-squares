@@ -27,8 +27,9 @@ require "option_parser"
 class GlobalVars
   @@wordlist_fn : String = ""
   @@start_chars : String = ""
+  @@fill_to : {UInt8, UInt8} = {(SQUARE_SIZE-1).to_u8, (SQUARE_SIZE-1).to_u8}
 
-  class_property wordlist_fn, start_chars
+  class_property wordlist_fn, start_chars, fill_to
 end
 
 OptionParser.parse! do |pr|
@@ -38,6 +39,10 @@ OptionParser.parse! do |pr|
   pr.on("-a SIZE", "--assert-size=SIZE", "Assert that this program was compiled for finding squares of order SIZE") do |s|
     s_i = s.to_i
     raise "-a/--assert-size failed, compiled order is #{SQUARE_SIZE}, argument was #{s_i}" unless SQUARE_SIZE == s_i
+  end
+  pr.on("-f COORDS", "--fill-to=COORDS", "Fill the square until COORDS is reached, then return the (potentially incomplete) squares. Column then row, comma separated, no space") do |coords|
+    s = coords.split(",").map(&.to_u8)
+    GlobalVars.fill_to = {s[0], s[1]}
   end
   pr.on("-h", "--help", "Print this help message") {puts pr;exit}
 end
@@ -225,13 +230,15 @@ end
 def recurse(sq : Square,
             column : UInt8 = 0u8,
             row : UInt8 = 0u8,
+            fill_to_col : UInt8 = (SQUARE_SIZE-1).to_u8,
+            fill_to_row : UInt8 = (SQUARE_SIZE-1).to_u8,
             &block : Square -> Nil)
   #STDERR.puts "running recurse with c:#{column}, r:#{row}"
-  if column >= SQUARE_SIZE ||
-     row >= SQUARE_SIZE
-    yield sq
-    return
-  end
+  #if column >= SQUARE_SIZE ||
+  #   row >= SQUARE_SIZE
+  #  yield sq
+  #  return
+  #end
   col_wd = Word.new(0u8)
   row_wd = Word.new(0u8)
   row.times do |r|
@@ -248,11 +255,14 @@ def recurse(sq : Square,
     StopRecorder.increment((row*SQUARE_SIZE) + column) if posi.empty?
   {% end %}
   posi.each do |char_u8|
-    #STDERR.puts "r: #{row}, c: #{column}, char: #{char_u8}"
     r = sq[row]
     r[column] = char_u8
     sq[row] = r
-    recurse(sq, new_col, new_row, &block)
+    if column == fill_to_col && row == fill_to_row
+      yield sq
+    else
+      recurse(sq, new_col, new_row, fill_to_col, fill_to_row, &block)
+    end
   end
 end
 
@@ -274,8 +284,12 @@ GlobalVars.start_chars.each_codepoint do |code|
   start_col, start_row = next_pos(start_col, start_row)
 end
 
-recurse(start_square, start_col, start_row) do |sq|
-  puts sq.map{|wd| wd.map(&.chr).join}.join("-") + " / " + SQUARE_SIZE.times.map{|i| sq.map{|wd| wd[i].chr}.join}.join("-")
+recurse(start_square, start_col, start_row, GlobalVars.fill_to[0], GlobalVars.fill_to[1]) do |sq|
+  puts (
+    sq.map{|wd| wd.map(&.chr).join}.join("-") +
+    " / " +
+    SQUARE_SIZE.times.map{|i| sq.map{|wd| wd[i].chr}.join}.join("-")
+  ).chars.map{|c| c == '\0' ? '*' : c}.join
   {% if flag?(:stop_after_60s) %}
     exit if (Time.now - start).minutes > 0
   {% end %}

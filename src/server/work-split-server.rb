@@ -27,6 +27,7 @@ while cli = serv.accept
     cli.puts({
                type: 'wordlist',
                words: DB[:words].map(:word),
+               options: JSON.parse(DB[:options].first[:options]),
                server_source_location: "https://github.com/shelvacu/fast-word-squares"
              }.to_json)
     

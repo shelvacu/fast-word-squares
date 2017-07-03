@@ -1,3 +1,7 @@
+/doc/
+/bin/
+/lib/
+/.shards/
 /old/
 *.db
 *.sql
