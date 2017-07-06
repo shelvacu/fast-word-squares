@@ -2,7 +2,7 @@ require 'open3'
 require 'json'
 require 'sequel'
 
-raise "need two arguments, word list and word length, optionally start length and compute binary location" unless ARGV.length == 2 || ARGV.length == 3
+raise "need two or four arguments, word list and word length, optionally start length and compute binary location" unless ARGV.length == 2 || ARGV.length == 4
 
 word_len = ARGV[1].to_i
 start_len = (ARGV[2] || word_len).to_i

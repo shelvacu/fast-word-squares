@@ -55,9 +55,9 @@ module WordSquarePacket
     {
       "wordlist" => wordlist,
       "word_len" => word_len,
-      "server_ver" => server_ver # "Shelvacu's work split server #{WordSquare::Version}"
+      "server_ver" => server_ver
       "server_src" => server_src
-    }.to_json
+    }.to_json.to_slice
   end
 
   def self.read_work(data : Bytes)
@@ -75,7 +75,7 @@ module WordSquarePacket
     result_length = rest[0] #The length of each result
     result_data = rest + 1
     raise InvalidPacket.new("The length of the result data is not a multiple of result_length") unless result_data.size % result_length == 0
-    return result_data.each_slice(result_length).map(&.map(&.chr).join)
+    return work_id.to_s, result_data.each_slice(result_length).map(&.map(&.chr).join)
   end
 
   def self.write_results(work_id : String, results : Array(String))
