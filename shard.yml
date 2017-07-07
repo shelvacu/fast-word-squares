@@ -5,13 +5,19 @@ authors:
   - Shelvacu <shelvacu@gmail.com>
 
 targets:
-  word-square:
-    main: src/word-square.cr
+  client:
+    main: src/client.cr
+  server:
+    main: src/server.cr
+  initialize-db:
+    main: src/initialize-db.cr
+  #word-square:
+  #  main: src/word-square.cr
 
 dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
 
-crystal: 0.22.0
+crystal: 0.23.0 # We need Logger, which is not in 0.22.0
 
 license: MIT

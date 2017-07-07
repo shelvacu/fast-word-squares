@@ -278,16 +278,42 @@ GlobalVars.start_chars.each_codepoint do |code|
   start_col, start_row = next_pos(start_col, start_row)
 end
 
-recurse(start_square, start_col, start_row, GlobalVars.fill_to) do |sq|
+def puts_sq(sq : Square)
   puts (
     sq.map{|wd| wd.map(&.chr).join}.join("-") +
     " / " +
     SQUARE_SIZE.times.map{|i| sq.map{|wd| wd[i].chr}.join}.join("-")
   ).chars.map{|c| c == '\0' ? '*' : c}.join
+end
+  
+{% if flag?(:square_buffer) %}
+  output_chan = Channel(Square).new(250_000)
+  output_thr_done_chan = Channel(Nil).new
+  output_thr = spawn do
+    loop do
+      sq = output_chan.receive
+      break if sq[0][0] == 0u8 #special signal to exit
+      puts_sq sq
+    end
+    output_thr_done_chan.send(nil)
+  end
+{% end %}
+
+recurse(start_square, start_col, start_row, GlobalVars.fill_to) do |sq|
+  {% if flag?(:square_buffer) %}
+    output_chan.send(sq)
+  {% else %}
+    puts_sq(sq)
+  {% end %}
   {% if flag?(:stop_after_60s) %}
     exit if (Time.now - start).minutes > 0
   {% end %}
 end
+
+{% if flag?(:square_buffer) %}
+  output_chan.send(Square.new(Word.new(0u8)))
+  output_thr_done_chan.receive
+{% end %}
 
 {% if flag?(:record_time) %}
   STDERR.puts Time.now - start
