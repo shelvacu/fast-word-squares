@@ -87,6 +87,7 @@ loop do
     ) do |proc|
       Fiber.yield
       proc.output.each_line.each_slice(1000) do |results|
+        puts "Writing to socket #{results.size} results for #{start_word}"
         bytes = WordSquarePacket.write_results(start_word, results)
         write_chan.send({WordSquarePacket::PacketType::ResultsPartial, bytes})
         Fiber.yield

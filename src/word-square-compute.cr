@@ -1,4 +1,45 @@
-{% if flag?(:square_size_10) %}
+#####
+#
+# ## Documentation of compile flags
+#
+# * square_size_N
+#   The only required compile option, designates the size (order)
+#   of the squares to be computed.
+#   Replace N with a number between 1 and 11 inclusive.
+#
+# * himem
+#   Use a different indexing algorithm using a very large
+#   but sparse section of memory.
+#
+#   Uses 2^(5×SQUARE_SIZE+2) bytes of memory. Due to a bug in
+#   Crystal, this cannot be used for square_size_6 or greater
+#
+# * fill_alt_blah, fill_really_diag
+#   Fill in the square in a different order. Initial testing shows
+#   that the default order is the fastest.
+#
+# * record_stops
+#   Records and displays the number of times the CharSet was empty
+#   (ie. the algorithm hit a dead end) for each cell. Hypothetically
+#   may be useful for determining how to make things faster.
+#
+# * pretty_output
+#   Instead of one result per line, display each square on multiple
+#   lines such that the squareness is obvious. Useful for show.
+#
+# * stop_after_60s
+#   Does what it says on the tin with a caviot: This will only stop
+#   directly after a result is printed; If no results are given then
+#   this will never stop.
+#
+# * square_buffer
+#   Add an output buffer, such that brief output blocks will not
+#   block computation. Probably not useful in most cases.
+#
+
+{% if flag?(:square_size_11) %}
+  SQUARE_SIZE = 11
+{% elsif flag?(:square_size_10) %}
   SQUARE_SIZE = 10
 {% elsif flag?(:square_size_9) %}
   SQUARE_SIZE = 9
@@ -127,6 +168,10 @@ end
       return @buff[word_index_to_int_index(idx)] #res
     end
 
+    def []?(idx : Word)
+      return self[idx]
+    end
+
     def add_char(char : UInt8, index : Word)
       i_index = word_index_to_int_index(index)
       cs = @buff[i_index]
@@ -226,14 +271,32 @@ end
   end
 {% end %}
 
+def stringize_sq(sq : Square)
+  end_str : String
+  join_str : String
+  {% if flag?(:pretty_output) %}
+    join_str = "\n"
+    end_str = ""
+  {% else %}
+    join_str = "-"
+    end_str = " / " +
+              SQUARE_SIZE.times.map{|i| sq.map{|wd| wd[i].chr}.join}.join("-")
+  {% end %}
+  return (
+    sq.map{|wd| wd.map(&.chr).join}.join(join_str) + end_str
+  ).chars.map{|c| c == '\0' ? '*' : c}.join
+end
+
 def recurse(sq : Square,
             column : UInt8 = 0u8,
             row : UInt8 = 0u8,
             fill_to : UInt8 = (SQUARE_AREA-1).to_u8,
             filled : UInt8 = 0u8,
             &block : Square -> Nil)
+  #STDERR.puts stringize_sq(sq)
   #STDERR.puts "running recurse with c:#{column}, r:#{row}"
-  if fill_to == filled
+  if filled > fill_to
+    #STDERR.puts "yielding"
     yield sq
     return
   end
@@ -279,11 +342,10 @@ GlobalVars.start_chars.each_codepoint do |code|
 end
 
 def puts_sq(sq : Square)
-  puts (
-    sq.map{|wd| wd.map(&.chr).join}.join("-") +
-    " / " +
-    SQUARE_SIZE.times.map{|i| sq.map{|wd| wd[i].chr}.join}.join("-")
-  ).chars.map{|c| c == '\0' ? '*' : c}.join
+  {% if flag?(:pretty_output) %}
+    puts
+  {% end %}
+  puts stringize_sq(sq)
 end
   
 {% if flag?(:square_buffer) %}
@@ -298,6 +360,9 @@ end
     output_thr_done_chan.send(nil)
   end
 {% end %}
+
+#STDERR.puts stringize_sq start_square
+STDERR.puts "Starting at col #{start_col}, row #{start_row}, fill to #{GlobalVars.fill_to}"
 
 recurse(start_square, start_col, start_row, GlobalVars.fill_to) do |sq|
   {% if flag?(:square_buffer) %}
