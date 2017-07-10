@@ -214,22 +214,26 @@ STDERR.puts "indexing"
 #  end
 #{% else %}
 WORDS.each do |word|
-  (1...SQUARE_SIZE).each do |i|
-    key = word.dup
-    i.times do |j|
-      key[-(j+1)] = 0u8
-    end
-    {% if flag?(:himem) || flag?(:trie) %}
-      INDEXED_WORDS.add_char(word[-i], key)
-    {% else %}
-      if !INDEXED_WORDS.has_key?(key)
-        INDEXED_WORDS[key] = CharSet.new
+  {% if flag?(:trie) %}
+    INDEXED_WORDS.add_word word
+  {% else %}
+    (1...SQUARE_SIZE).each do |i|
+      key = word.dup
+      i.times do |j|
+        key[-(j+1)] = 0u8
       end
-      cs = INDEXED_WORDS[key]
-      cs.add_char(word[-i])
-      INDEXED_WORDS[key] = cs
-    {% end %}
-  end
+      {% if flag?(:himem) %}
+        INDEXED_WORDS.add_char(word[-i], key)
+      {% else %}
+        if !INDEXED_WORDS.has_key?(key)
+          INDEXED_WORDS[key] = CharSet.new
+        end
+        cs = INDEXED_WORDS[key]
+        cs.add_char(word[-i])
+        INDEXED_WORDS[key] = cs
+      {% end %}
+    end
+  {% end %}
 end
 
 STDERR.puts "index finished"
@@ -320,6 +324,8 @@ def recurse(sq : Square,
   col_posi = INDEXED_WORDS[col_wd]? || CharSet.new
   row_posi = INDEXED_WORDS[row_wd]? || CharSet.new
   posi = col_posi & row_posi
+  #puts "col_wd: #{col_wd.map(&.chr).join.gsub('\0','*')}, row_wd: #{row_wd.map(&.chr).join.gsub('\0','*')}"
+  #puts "col_posi: #{col_posi}, row_posi: #{row_posi}, posi: #{posi}"
   new_col, new_row = next_pos(column,row)
   {% if flag?(:record_stops) %}
     StopRecorder.increment((row*SQUARE_SIZE) + column) if posi.empty?

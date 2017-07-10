@@ -134,12 +134,13 @@ loop do
     ) do |proc|
       Fiber.yield
       proc.output.each_line.each_slice(1000) do |results|
-        puts "Writing to socket #{results.size} results for #{start_word}"
+        #puts "Writing to socket #{results.size} results for #{start_word}"
         bytes = WordSquarePacket.write_results(start_word, results)
         write_chan.send({WordSquarePacket::PacketType::ResultsPartial, bytes})
         Fiber.yield
       end
 
+      puts "Finished #{start_word}"
       # Tell the server we've finished sending it data.
       bytes = WordSquarePacket.write_results(start_word, [] of String)
       write_chan.send({WordSquarePacket::PacketType::ResultsFinish, bytes})

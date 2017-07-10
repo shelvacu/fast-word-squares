@@ -13,6 +13,6 @@ bin/server: src/server.cr src/word-square/word-square-packet.cr src/word-square/
 bin/client: src/client.cr src/word-square/word-square-packet.cr
 	crystal build $< -o $@
 bin/compute-o%: src/word-square-compute.cr
-	crystal build $< -D square_size_$* -o $@
+	crystal build $< --release -D square_size_$* -o $@
 
 compute: bin/compute-o3 bin/compute-o4 bin/compute-o5 bin/compute-o6 bin/compute-o7 bin/compute-o8 bin/compute-o9 bin/compute-o10 bin/compute-o11
