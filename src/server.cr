@@ -17,8 +17,9 @@ DB.open "sqlite3://./db.sqlite" do |db|
   word_len = db.query_one("SELECT word_length FROM options", as: Int32).to_u8
   serv = TCPServer.new("0.0.0.0", 45999)
 
-  while cli = serv.accept
+  while tcli = serv.accept
     spawn do
+      cli = tcli
       ip = cli.remote_address.address
       wl = db.query_all("SELECT word FROM words", as: String)
       data = WordSquarePacket.write_start(

@@ -4,20 +4,22 @@ version: 0.1.0
 authors:
   - Shelvacu <shelvacu@gmail.com>
 
-targets:
-  client:
-    main: src/client.cr
-  server:
-    main: src/server.cr
-  initialize-db:
-    main: src/initialize-db.cr
-  #word-square:
-  #  main: src/word-square.cr
+# Use makefile for building
+#targets:
+#  client:
+#    main: src/client.cr
+#  server:
+#    main: src/server.cr
+#  initialize-db:
+#    main: src/initialize-db.cr
+#  word-square:
+#    main: src/word-square.cr
 
 dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
+    version: ~> 0.8.2
 
 crystal: 0.23.0 # We need Logger, which is not in 0.22.0
 
-license: MIT
+license: AGPL-3.0

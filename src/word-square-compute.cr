@@ -64,6 +64,9 @@
 {% end %}
 
 require "option_parser"
+{% if flag?(:trie) %}
+  require "./trie"
+{% end %}
 
 class GlobalVars
   @@wordlist_fn : String = ""
@@ -75,13 +78,13 @@ end
 
 OptionParser.parse! do |pr|
   pr.banner = "Usage: #{$0} [arguments]"
-  pr.on("-w WORDLIST", "--wordlist=WORDLIST", "Filename of the wordlist to use [REQUIRED]") {|arg| GlobalVars.wordlist_fn = arg}
-  pr.on("-s CHARS", "--start=CHARS", "Only search for squares starting with CHARS. Order is dependent on compiler flags") {|c| GlobalVars.start_chars = c}
-  pr.on("-a SIZE", "--assert-size=SIZE", "Assert that this program was compiled for finding squares of order SIZE") do |s|
+  pr.on("-w WORDLIST", "--wordlist WORDLIST", "Filename of the wordlist to use [REQUIRED]") {|arg| GlobalVars.wordlist_fn = arg}
+  pr.on("-s CHARS", "--start CHARS", "Only search for squares starting with CHARS. Order is dependent on compiler flags") {|c| GlobalVars.start_chars = c}
+  pr.on("-a SIZE", "--assert-size SIZE", "Assert that this program was compiled for finding squares of order SIZE") do |s|
     s_i = s.to_i
     raise "-a/--assert-size failed, compiled order is #{SQUARE_SIZE}, argument was #{s_i}" unless SQUARE_SIZE == s_i
   end
-  pr.on("-f SIZE", "--fill-to=SIZE", "Fill the square until SIZE chars have been placed, then return the (potentially incomplete) squares.") do |s|
+  pr.on("-f SIZE", "--fill-to SIZE", "Fill the square until SIZE chars have been placed, then return the (potentially incomplete) squares.") do |s|
     GlobalVars.fill_to = s.to_u8
   end
   pr.on("-h", "--help", "Print this help message") {puts pr;exit}
@@ -92,12 +95,16 @@ raise "Wordlist is required." unless GlobalVars.wordlist_fn != ""
 SQUARE_AREA = (SQUARE_SIZE * SQUARE_SIZE)
 alias Word = StaticArray(UInt8, SQUARE_SIZE)
 
-WORDS = File.read(GlobalVars.wordlist_fn).split.reject{|word| word.size != SQUARE_SIZE}.map{|word| word.downcase}.map do |word_str|
-  word_str.chars.each do |ch|
-    if ch.ord > 127
-      next #skip this word
-    end
-  end
+WORDS = File.read(GlobalVars.wordlist_fn)
+        .split
+        .reject{|word| word.size != SQUARE_SIZE || !word.chars.all?{|c| 'a' <= c && c <= 'z'}}
+        .map{|word| word.downcase}
+        .map do |word_str|
+  #word_str.chars.each do |ch|
+  #  unless 'a' <= ch && ch <= 'z'
+  #    next #skip this word
+  #  end
+  #end
   word_sa = Word.new(0u8)
   SQUARE_SIZE.times do |i|
     word_sa[i] = word_str[i].ord.to_u8
@@ -190,6 +197,8 @@ end
   end
 
   INDEXED_WORDS = WordIndex.new
+{% elsif flag?(:trie) %}
+  INDEXED_WORDS = TrieNode.new
 {% else %}
   # Word here is actually used as a prefix, with the remaining values set to zero.
   INDEXED_WORDS = {} of Word => CharSet
@@ -210,7 +219,7 @@ WORDS.each do |word|
     i.times do |j|
       key[-(j+1)] = 0u8
     end
-    {% if flag?(:himem) %}
+    {% if flag?(:himem) || flag?(:trie) %}
       INDEXED_WORDS.add_char(word[-i], key)
     {% else %}
       if !INDEXED_WORDS.has_key?(key)

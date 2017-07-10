@@ -1,14 +1,50 @@
 require "socket"
+require "option_parser"
 require "./word-square/word-square-packet"
+
+compute_exec = ""
+server_addr  = ""
+num_threads  = System.cpu_count * 2
+
+parser = 
+OptionParser.parse! do |pr|
+  pr.banner = "Usage: #{$0} [arguments] server_address"
+  #pr.on("-s SERV", "--server SERV", "The name or ip address of the server to connect to.")
+  pr.on("-c EXEC", "--compute-exec EXEC", "The path to the executable to use for compute. Will try to determine automatically if not specified.") do |exec_path|
+    compute_exec = exec_path
+  end
+  pr.on("-t THREADS","--threads THREADS", "The number of concurrent processes to run. Defaults to two times the number of logical processors.") do |t|
+    t = t.to_i
+    if t <= 0
+      STDERR.puts "Invalid number of cores: #{t}"
+      exit 1
+    end
+    num_threads = t
+  end
+  pr.on("-h","--help"){STDERR.puts pr;exit 0}
+  pr.unknown_args do |args|
+    if args.size != 1
+      STDERR.puts "Expected exactly one (non-dash) argument, got #{args.size} arguments."
+      exit 1
+    end
+    server_addr = args.first
+  end
+end
+if server_addr == ""
+  STDERR.puts parser
+  exit 1
+end
 
 thread_pool = [] of Fiber
 work_chan = Channel(String).new
 
-raise "Need server name/ip, path to compute executable, and number of threads" unless ARGV.size == 3
-
-num_threads = ARGV[2].to_i
-
-puts "Will connect to #{ARGV[0]}, and use the compute executable #{ARGV[1]}. Will create #{num_threads} processes."
+#TODO: correct this message.
+puts "Will connect to #{server_addr}, and create #{num_threads} processes."
+if compute_exec == ""
+  puts "Determining compute exec path automatically"
+else
+  puts "Using compute executable at #{File.expand_path(compute_exec)}"
+end
 
 conn = TCPSocket.new(ARGV[0], 45999)
 puts "Connected"
@@ -24,6 +60,17 @@ end
 start = WordSquarePacket.read_start(data)
 
 puts " to #{start[:server_ver]}"
+
+if compute_exec == ""
+  guess_compute_path = File.join(File.dirname($0), "compute-o#{start["word_len"]}")
+  if File.executable?(guess_compute_path) # Will also test existance.
+    compute_exec = guess_compute_path
+    puts "Using compute executable #{compute_exec}"
+  else
+    STDERR.puts "Could not locate a compute executable of order #{start["word_len"]}"
+    exit 1
+  end
+end
 
 wordlist_fn = `mktemp --tmpdir word-square-wordlist-tmp.XXXXXXXXXX`.chomp
 
@@ -77,9 +124,9 @@ loop do
         "-a", start["word_len"].to_s,
         "-s", start_word
       ]
-    puts "#{ARGV[1].inspect} #{args.inspect}"
+    puts "#{compute_exec.inspect} #{args.inspect}"
     Process.run(
-      ARGV[1],
+      compute_exec,
       args,
       shell: false,
       output: nil, #allocate an fn to read STDOUT
