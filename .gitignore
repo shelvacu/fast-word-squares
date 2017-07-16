@@ -11,4 +11,5 @@ wordsquare-wordlist-tmpfile-*.txt
 word-square-result-*.txt
 *.log
 *.sqlite
+*.sqlite-journal
 biglist.txt

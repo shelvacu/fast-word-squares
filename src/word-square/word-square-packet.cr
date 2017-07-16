@@ -73,7 +73,7 @@ module WordSquarePacket
     work.to_slice
   end
   
-  def self.read_results(data : Bytes)
+  def self.read_results(data : Bytes) : {String, Array(String)}
     work_id_len = data[0]
     work_id = data[1, work_id_len]
     rest = data + (work_id_len + 1)
@@ -85,7 +85,7 @@ module WordSquarePacket
     else
       results = result_data.each_slice(result_length).map(&.map(&.chr).join)
     end
-    return String.new(work_id), results
+    return String.new(work_id), results.to_a
   end
   
   def self.write_results(work_id : String, results : Array(String))

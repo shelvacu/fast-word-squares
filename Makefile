@@ -7,6 +7,7 @@ client: bin/client compute
 # install libraries, only needed for server right now.
 lib/: shard.yml shard.lock
 	shards install
+	touch $@
 
 bin/server: src/server.cr src/word-square/word-square-packet.cr src/word-square/version.cr lib/
 	crystal build $< -o $@

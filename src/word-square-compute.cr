@@ -142,7 +142,7 @@ struct CharSet
 
   def each
     26.times do |i|
-      if (@internal & (2.to_u32**i)) != 0
+      if (@internal & (2_u32**i)) != 0
         yield (i + 97).to_u8
       end
     end
@@ -305,7 +305,7 @@ def recurse(sq : Square,
             row : UInt8 = 0u8,
             fill_to : UInt8 = (SQUARE_AREA-1).to_u8,
             filled : UInt8 = 0u8,
-            &block : Square -> Nil)
+            &block : Square ->)
   #STDERR.puts stringize_sq(sq)
   #STDERR.puts "running recurse with c:#{column}, r:#{row}"
   if filled > fill_to
@@ -379,7 +379,7 @@ end
 #STDERR.puts stringize_sq start_square
 STDERR.puts "Starting at col #{start_col}, row #{start_row}, fill to #{GlobalVars.fill_to}"
 
-recurse(start_square, start_col, start_row, GlobalVars.fill_to) do |sq|
+recurse(start_square, start_col, start_row, GlobalVars.fill_to, GlobalVars.start_chars.size.to_u8) do |sq|
   {% if flag?(:square_buffer) %}
     output_chan.send(sq)
   {% else %}

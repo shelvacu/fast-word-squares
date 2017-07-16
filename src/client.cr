@@ -21,7 +21,7 @@ OptionParser.parse! do |pr|
     end
     num_threads = t
   end
-  pr.on("-h","--help"){STDERR.puts pr;exit 0}
+  pr.on("-h","--help", "Print this help message"){STDERR.puts pr;exit 0}
   pr.unknown_args do |args|
     if args.size != 1
       STDERR.puts "Expected exactly one (non-dash) argument, got #{args.size} arguments."
@@ -46,7 +46,7 @@ else
   puts "Using compute executable at #{File.expand_path(compute_exec)}"
 end
 
-conn = TCPSocket.new(ARGV[0], 45999)
+conn = TCPSocket.new(server_addr, 45999)
 puts "Connected"
 
 ptype, data = WordSquarePacket.read_pkt(conn)
@@ -133,7 +133,7 @@ loop do
       error: true #pipe STDERR from the internal process to this process
     ) do |proc|
       Fiber.yield
-      proc.output.each_line.each_slice(1000) do |results|
+      proc.output.each_line.each_slice(10_000, reuse: true) do |results|
         #puts "Writing to socket #{results.size} results for #{start_word}"
         bytes = WordSquarePacket.write_results(start_word, results)
         write_chan.send({WordSquarePacket::PacketType::ResultsPartial, bytes})
