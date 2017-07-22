@@ -12,6 +12,13 @@ lib LibC
   fun fsync(fd : LibC::Int) : LibC::Int
 end
 
+class File
+  def fsync
+    self.flush
+    LibC.fsync(@fd)
+  end
+end
+
 database_short_fn = "./db.sqlite"
 datadir = "."
 
@@ -42,6 +49,16 @@ logger = Logger.new(IO::MultiWriter.new(log_fh, STDERR, sync_close: true))
 logger.level = Logger::DEBUG
 
 logger.info "Starting server"
+
+Signal::USR1.trap do #re-open logfile on SIGUSR to allow for log rotation
+  logger.info "Recieved SIGUSR1"
+  res_mutex.synchronize do
+    logger.info "Re-opening results file"
+    res_fh.fsync
+    res_fh.close
+    res_fh = File.open(res_fn,"a")
+  end
+end
 
 word_len = 0_u8
 
@@ -152,17 +169,18 @@ while tcli = serv.accept
           #check LibSQLite3.exec(plain_db, "BEGIN", nil, nil, nil)
           res_mutex.synchronize do
             #Gzip::Writer.open(res_fh) do |gzip_io|
-              results.each do |res_text|
-                #check LibSQLite3.bind_text(insert_stmt, 1, res_text, res_text.bytesize, nil)
-                #res = LibSQLite3.step(insert_stmt)
-                #raise "bad" unless res == 101
-                #check LibSQLite3.reset(insert_stmt)
-                #db.exec("INSERT INTO results (result) VALUES (?)"+(",(?)"*(slice.size-1)),slice)
-                res_fh.puts res_text
-              end
+            results.each do |res_text|
+              #check LibSQLite3.bind_text(insert_stmt, 1, res_text, res_text.bytesize, nil)
+              #res = LibSQLite3.step(insert_stmt)
+              #raise "bad" unless res == 101
+              #check LibSQLite3.reset(insert_stmt)
+              #db.exec("INSERT INTO results (result) VALUES (?)"+(",(?)"*(slice.size-1)),slice)
+              res_fh.puts res_text
+            end
             #end
-            res_fh.flush
-            LibC.fsync(res_fh.fd)
+            #res_fh.flush
+            #LibC.fsync(res_fh.fd)
+            res_fh.fsync  
           end
           #check LibSQLite3.exec(plain_db, "COMMIT", nil, nil, nil)
           stop_time = Time.now
