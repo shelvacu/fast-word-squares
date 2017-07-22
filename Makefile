@@ -1,10 +1,11 @@
-.PHONY: all client server compute client_only
-all: client server compute
+.PHONY: all client server compute client_only init-db
+all: client server compute bin/initialize-db
 
 server: bin/server compute
 client: bin/client compute
+init-db: bin/initialize-db
 
-# install libraries, only needed for server right now.
+# install libraries, only needed for server & init right now.
 lib/: shard.yml shard.lock
 	shards install
 	touch $@
@@ -12,6 +13,8 @@ lib/: shard.yml shard.lock
 bin/server: src/server.cr src/word-square/word-square-packet.cr src/word-square/version.cr lib/
 	crystal build $< -o $@
 bin/client: src/client.cr src/word-square/word-square-packet.cr
+	crystal build $< -o $@
+bin/initialize-db: src/initialize-db.cr lib/
 	crystal build $< -o $@
 bin/compute-o%: src/word-square-compute.cr
 	crystal build $< --release -D square_size_$* -o $@
