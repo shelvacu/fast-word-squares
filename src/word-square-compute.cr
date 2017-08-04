@@ -11,7 +11,7 @@
 #   Use a different indexing algorithm using a very large
 #   but sparse section of memory.
 #
-#   Uses 2^(5×SQUARE_SIZE+2) bytes of memory. Due to a bug in
+#   Uses 2^(5×SQUARE_SIZE+2) bytes of memory. Due to many bugs in
 #   Crystal, this cannot be used for square_size_6 or greater
 #
 # * fill_alt_blah, fill_really_diag
@@ -36,6 +36,16 @@
 #   Add an output buffer, such that brief output blocks will not
 #   block computation. Probably not useful in most cases.
 #
+# * disable_gc
+#   This disables the garbage collector during the actual computation
+#   for a small performance gain.
+#   Implies allocless_puts_sq
+#
+# * allocless_compute
+#   This prints squares in a different format (excludes the flipped
+#   version of the square) and is slightly faster. This is because this
+#   implementation does not do anything that would cause a malloc.
+#   Implied by disable_gc
 
 {% if flag?(:square_size_11) %}
   SQUARE_SIZE = 11
@@ -95,7 +105,7 @@ raise "Wordlist is required." unless GlobalVars.wordlist_fn != ""
 SQUARE_AREA = (SQUARE_SIZE * SQUARE_SIZE)
 alias Word = StaticArray(UInt8, SQUARE_SIZE)
 
-WORDS = File.read(GlobalVars.wordlist_fn)
+words = File.read(GlobalVars.wordlist_fn)
         .split
         .reject{|word| word.size != SQUARE_SIZE || !word.chars.all?{|c| 'a' <= c && c <= 'z'}}
         .map{|word| word.downcase}
@@ -161,12 +171,18 @@ end
 
 {% if flag?(:himem) %}
   struct WordIndex
-    BUFF_SIZE = (2**(5*SQUARE_SIZE))
+    # The 5 here is because this uses 5 bits per character
+    BUFF_SIZE = (2**(SQUARE_SIZE.to_u64*5))
+
+    @initialized = Set(UInt64).new
 
     def initialize
-      STDERR.puts "Initializing #{BUFF_SIZE*sizeof(CharSet)} bytes of memory"
-      @buff = Slice(CharSet).new(BUFF_SIZE, CharSet.new)
+      STDERR.puts "Allocating #{BUFF_SIZE*sizeof(CharSet)} bytes of memory"
+      #@buff = Slice(CharSet).new(BUFF_SIZE, CharSet.new)
+      #@buff = uninitialized CharSet[BUFF_SIZE]
+      @buff = Pointer(CharSet).malloc(BUFF_SIZE)
       @buff[0] = CharSet.new((2u32**27)-1)
+      @initialized.add(0u64)
     end
 
     def [](idx : Word)
@@ -181,9 +197,17 @@ end
 
     def add_char(char : UInt8, index : Word)
       i_index = word_index_to_int_index(index)
+      if !@initialized.includes?(i_index)
+        @buff[i_index] = CharSet.new
+        @initialized.add(i_index)
+      end
       cs = @buff[i_index]
       cs.add_char(char)
       @buff[i_index] = cs
+    end
+
+    def bytes_used
+      return @initialized.size * sizeof(CharSet)
     end
 
     private def word_index_to_int_index(w : Word)
@@ -213,7 +237,8 @@ STDERR.puts "indexing"
 #    # TODO: Make an index of every substring
 #  end
 #{% else %}
-WORDS.each do |word|
+words.each do |word|
+  #puts "Processing #{word}"
   {% if flag?(:trie) %}
     INDEXED_WORDS.add_word word
   {% else %}
@@ -235,6 +260,12 @@ WORDS.each do |word|
     end
   {% end %}
 end
+
+words = nil
+
+{% if flag?(:himem) %}
+  STDERR.puts "Actually used #{INDEXED_WORDS.bytes_used} bytes."
+{% end %}
 
 STDERR.puts "index finished"
 
@@ -362,7 +393,20 @@ def puts_sq(sq : Square)
   {% end %}
   puts stringize_sq(sq)
 end
-  
+
+# buf must be in format xxxxx-xxxxx-xxxxx-xxxxx-xxxxx followed by a newline
+def allocless_puts_sq(sq : Square, buf : Bytes)
+  if buf.size != SQUARE_AREA + SQUARE_SIZE
+    raise ArgumentError.new("Incorrectly sized buf")
+  end
+  sq.each_with_index do |wd, wd_i|
+    wd.each_with_index do |chr, chr_i|
+      buf[ (wd_i*(SQUARE_SIZE+1)) + chr_i ] = chr
+    end
+  end
+  STDOUT.write(buf)
+end
+
 {% if flag?(:square_buffer) %}
   output_chan = Channel(Square).new(250_000)
   output_thr_done_chan = Channel(Nil).new
@@ -379,9 +423,18 @@ end
 #STDERR.puts stringize_sq start_square
 STDERR.puts "Starting at col #{start_col}, row #{start_row}, fill to #{GlobalVars.fill_to}"
 
+{% if flag?(:disable_gc) %}
+  GC.disable
+{% end %}
+{% if flag?(:disable_gc) || flag?(:allocless_compute) %}
+  buf = (SQUARE_SIZE.times.map{ SQUARE_SIZE.times.map{"*"}.join }.join("-") + "\n").to_slice.clone
+{% end %}
+
 recurse(start_square, start_col, start_row, GlobalVars.fill_to, GlobalVars.start_chars.size.to_u8) do |sq|
   {% if flag?(:square_buffer) %}
     output_chan.send(sq)
+  {% elsif flag?(:disable_gc) || flag?(:allocless_compute) %}
+    allocless_puts_sq(sq, buf)
   {% else %}
     puts_sq(sq)
   {% end %}
@@ -389,6 +442,10 @@ recurse(start_square, start_col, start_row, GlobalVars.fill_to, GlobalVars.start
     exit if (Time.now - start).minutes > 0
   {% end %}
 end
+
+{% if flag?(:disable_gc) %}
+  GC.enable
+{% end %}
 
 {% if flag?(:square_buffer) %}
   output_chan.send(Square.new(Word.new(0u8)))
