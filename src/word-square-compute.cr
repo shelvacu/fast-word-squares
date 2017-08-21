@@ -47,33 +47,9 @@
 #   implementation does not do anything that would cause a malloc.
 #   Implied by disable_gc
 
-{% if flag?(:square_size_11) %}
-  SQUARE_SIZE = 11
-{% elsif flag?(:square_size_10) %}
-  SQUARE_SIZE = 10
-{% elsif flag?(:square_size_9) %}
-  SQUARE_SIZE = 9
-{% elsif flag?(:square_size_8) %}
-  SQUARE_SIZE = 8
-{% elsif flag?(:square_size_7) %}
-  SQUARE_SIZE = 7
-{% elsif flag?(:square_size_6) %}
-  SQUARE_SIZE = 6
-{% elsif flag?(:square_size_5) %}
-  SQUARE_SIZE = 5
-{% elsif flag?(:square_size_4) %}
-  SQUARE_SIZE = 4
-{% elsif flag?(:square_size_3) %}
-  SQUARE_SIZE = 3
-{% elsif flag?(:square_size_2) %}
-  SQUARE_SIZE = 2
-{% elsif flag?(:square_size_1) %}
-  SQUARE_SIZE = 1
-{% else %}
-  {% raise("you must specify one of the square_size_* compiler flags (eg square_size_4)") %}
-{% end %}
-
 require "option_parser"
+require "./square_size" # This defines SQUARE_SIZE, SQUARE_AREA, Word, and Square
+require "./filter_wordlist"
 {% if flag?(:trie) %}
   require "./trie"
 {% end %}
@@ -82,14 +58,30 @@ class GlobalVars
   @@wordlist_fn : String = ""
   @@start_chars : String = ""
   @@fill_to : UInt8 = (SQUARE_AREA-1).to_u8
+  @@show_word : Bool = false
+  @@must_include : Word? = nil
 
-  class_property wordlist_fn, start_chars, fill_to
+  class_property wordlist_fn, start_chars, fill_to, show_word, must_include
+
+  def self.must_include=(val : String)
+    word = Word.new(0_u8)
+    #puts "val size is #{val.size}, expecting #{SQUARE_SIZE}"
+    raise ArgumentError.new if val.size != SQUARE_SIZE
+    SQUARE_SIZE.times do |i|
+      word[i] = val[i].ord.to_u8
+    end
+    @@must_include = word
+  end
 end
 
 OptionParser.parse! do |pr|
   pr.banner = "Usage: #{$0} [arguments]"
-  pr.on("-w WORDLIST", "--wordlist WORDLIST", "Filename of the wordlist to use [REQUIRED]") {|arg| GlobalVars.wordlist_fn = arg}
-  pr.on("-s CHARS", "--start CHARS", "Only search for squares starting with CHARS. Order is dependent on compiler flags") {|c| GlobalVars.start_chars = c}
+  pr.on("-w WORDLIST", "--wordlist WORDLIST", "Filename of the wordlist to use [REQUIRED]"){|arg|
+    GlobalVars.wordlist_fn = arg
+  }
+  pr.on("-s CHARS", "--start CHARS", "Only search for squares starting with CHARS. Order is dependent on compiler flags"){|c|
+    GlobalVars.start_chars = c
+  }
   pr.on("-a SIZE", "--assert-size SIZE", "Assert that this program was compiled for finding squares of order SIZE") do |s|
     s_i = s.to_i
     raise "-a/--assert-size failed, compiled order is #{SQUARE_SIZE}, argument was #{s_i}" unless SQUARE_SIZE == s_i
@@ -97,30 +89,13 @@ OptionParser.parse! do |pr|
   pr.on("-f SIZE", "--fill-to SIZE", "Fill the square until SIZE chars have been placed, then return the (potentially incomplete) squares.") do |s|
     GlobalVars.fill_to = s.to_u8
   end
+  pr.on("-i WORD", "--must-include WORD", "Search only for squares containing a certain WORD") do |w|
+    GlobalVars.must_include = w
+  end
   pr.on("-h", "--help", "Print this help message") {puts pr;exit}
 end
 
 raise "Wordlist is required." unless GlobalVars.wordlist_fn != ""
-
-SQUARE_AREA = (SQUARE_SIZE * SQUARE_SIZE)
-alias Word = StaticArray(UInt8, SQUARE_SIZE)
-
-words = File.read(GlobalVars.wordlist_fn)
-        .split
-        .reject{|word| word.size != SQUARE_SIZE || !word.chars.all?{|c| 'a' <= c && c <= 'z'}}
-        .map{|word| word.downcase}
-        .map do |word_str|
-  #word_str.chars.each do |ch|
-  #  unless 'a' <= ch && ch <= 'z'
-  #    next #skip this word
-  #  end
-  #end
-  word_sa = Word.new(0u8)
-  SQUARE_SIZE.times do |i|
-    word_sa[i] = word_str[i].ord.to_u8
-  end
-  word_sa
-end
 
 struct CharSet
   @internal : UInt32
@@ -135,7 +110,7 @@ struct CharSet
   end
   
   def add_char(c : UInt8)
-    @internal |= (2.to_u32**(c - 97))
+    @internal |= char_to_mask(c)
   end
 
   def remove_char(c : Char)
@@ -166,6 +141,18 @@ struct CharSet
   
   def empty?
     @internal == 0
+  end
+
+  def include?(c : Char)
+    return include?(c.ord.to_u8)
+  end
+  
+  def include?(c : UInt8)
+    return (@internal & char_to_mask(c)) != 0
+  end
+
+  private def char_to_mask(c : UInt8)
+    (2.to_u32**(c - 97))
   end
 end
 
@@ -232,44 +219,38 @@ end
 
 STDERR.puts "indexing"
 
-#{% if flag?(:expansive_index) %}
-#  WORDS.each do |word|
-#    # TODO: Make an index of every substring
-#  end
-#{% else %}
-words.each do |word|
-  #puts "Processing #{word}"
-  {% if flag?(:trie) %}
-    INDEXED_WORDS.add_word word
-  {% else %}
-    (1...SQUARE_SIZE).each do |i|
-      key = word.dup
-      i.times do |j|
-        key[-(j+1)] = 0u8
-      end
-      {% if flag?(:himem) %}
-        INDEXED_WORDS.add_char(word[-i], key)
-      {% else %}
-        if !INDEXED_WORDS.has_key?(key)
-          INDEXED_WORDS[key] = CharSet.new
+begin
+  words = filtered_wordlist(GlobalVars.wordlist_fn)
+  STDERR.puts "Using #{words.size} words."
+  words.each do |word|
+    {% if flag?(:trie) %}
+      INDEXED_WORDS.add_word word
+    {% else %}
+      (1...SQUARE_SIZE).each do |i|
+        key = word.dup
+        i.times do |j|
+          key[-(j+1)] = 0u8
         end
-        cs = INDEXED_WORDS[key]
-        cs.add_char(word[-i])
-        INDEXED_WORDS[key] = cs
-      {% end %}
-    end
-  {% end %}
+        {% if flag?(:himem) %}
+          INDEXED_WORDS.add_char(word[-i], key)
+        {% else %}
+          if !INDEXED_WORDS.has_key?(key)
+            INDEXED_WORDS[key] = CharSet.new
+          end
+          cs = INDEXED_WORDS[key]
+          cs.add_char(word[-i])
+          INDEXED_WORDS[key] = cs
+        {% end %}
+      end
+    {% end %}
+  end
 end
-
-words = nil
 
 {% if flag?(:himem) %}
   STDERR.puts "Actually used #{INDEXED_WORDS.bytes_used} bytes."
 {% end %}
 
 STDERR.puts "index finished"
-
-alias Square = StaticArray(Word, SQUARE_SIZE)
 
 @[AlwaysInline]
 def next_pos(column : UInt8, row : UInt8) : {UInt8, UInt8}
@@ -332,20 +313,34 @@ def stringize_sq(sq : Square)
 end
 
 def recurse(sq : Square,
-            column : UInt8 = 0u8,
-            row : UInt8 = 0u8,
+            column : UInt8 = 0_u8,
+            row : UInt8 = 0_u8,
             fill_to : UInt8 = (SQUARE_AREA-1).to_u8,
-            filled : UInt8 = 0u8,
+            filled : UInt8 = 0_u8,
+            add_at : UInt8 = 255_u8,
+            to_add : Word = Word.new(0_u8),
             &block : Square ->)
-  #STDERR.puts stringize_sq(sq)
-  #STDERR.puts "running recurse with c:#{column}, r:#{row}"
+  if row == add_at
+    sq[row] = to_add
+    # Ensure that this word can actually go where we've stuffed it
+    test_wd = Word.new(0_u8)
+    SQUARE_SIZE.times do |c|
+      row.times do |r|
+        test_wd[r] = sq[r][c]
+      end
+      return unless (INDEXED_WORDS[test_wd]? || CharSet.new).include?(sq[row][c])
+    end
+    # If we haven't returned from the above than it can! w00t.
+    filled += SQUARE_SIZE
+    row += 1
+  end    
   if filled > fill_to
     #STDERR.puts "yielding"
     yield sq
     return
   end
-  col_wd = Word.new(0u8)
-  row_wd = Word.new(0u8)
+  col_wd = Word.new(0_u8)
+  row_wd = Word.new(0_u8)
   row.times do |r|
     col_wd[r] = sq[r][column]
   end
@@ -365,7 +360,7 @@ def recurse(sq : Square,
     r = sq[row]
     r[column] = char_u8
     sq[row] = r
-    recurse(sq, new_col, new_row, fill_to, filled+1, &block)
+    recurse(sq, new_col, new_row, fill_to, filled+1, add_at, to_add, &block)
   end
 end
 
@@ -424,13 +419,14 @@ end
 STDERR.puts "Starting at col #{start_col}, row #{start_row}, fill to #{GlobalVars.fill_to}"
 
 {% if flag?(:disable_gc) %}
+  GC.collect
   GC.disable
 {% end %}
 {% if flag?(:disable_gc) || flag?(:allocless_compute) %}
   buf = (SQUARE_SIZE.times.map{ SQUARE_SIZE.times.map{"*"}.join }.join("-") + "\n").to_slice.clone
 {% end %}
 
-recurse(start_square, start_col, start_row, GlobalVars.fill_to, GlobalVars.start_chars.size.to_u8) do |sq|
+output = ->( sq : Square ) do
   {% if flag?(:square_buffer) %}
     output_chan.send(sq)
   {% elsif flag?(:disable_gc) || flag?(:allocless_compute) %}
@@ -441,6 +437,25 @@ recurse(start_square, start_col, start_row, GlobalVars.fill_to, GlobalVars.start
   {% if flag?(:stop_after_60s) %}
     exit if (Time.now - start).minutes > 0
   {% end %}
+end
+if GlobalVars.must_include.nil?
+  puts "No word inclusion restrictions"
+  recurse(start_square, start_col, start_row, GlobalVars.fill_to, GlobalVars.start_chars.size.to_u8, &output)
+else
+  must_include = GlobalVars.must_include.not_nil!
+  STDERR.puts "Must include a word"
+  SQUARE_SIZE.times do |add_at|
+    STDERR.puts "Trying adding at row #{add_at}"
+    recurse(
+      sq: start_square,
+      column: start_col,
+      row: start_row,
+      fill_to: GlobalVars.fill_to,
+      filled: GlobalVars.start_chars.size.to_u8,
+      add_at: add_at.to_u8,
+      to_add: must_include,
+      &output)
+  end
 end
 
 {% if flag?(:disable_gc) %}
